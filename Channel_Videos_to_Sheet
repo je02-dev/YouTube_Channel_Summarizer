@@ -1,0 +1,134 @@
+//Function that checks if the selected word is present in the sentence.
+// Reference
+//https://www.geeksforgeeks.org/check-if-a-word-is-present-in-a-sentence/
+function isWordPresent(sentence, word)
+{
+     // To break the sentence in words
+    let s = String(sentence).split("/");
+  
+    // To temporarily store each individual word
+    for ( let temp=0;temp<s.length;temp++)
+    {
+  
+        // Comparing the current word
+        // with the word to be searched
+        if (s[temp] == (word) )
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+function supportexec(sheet,channelId){
+  if (channelId.length <= 0) {
+    return;
+  }
+  console.log(channelId);
+  
+  const playlistId = getUploadPlaylistId(channelId);
+  if (playlistId.length <= 0) {
+    return;
+  }
+  console.log(playlistId);
+  
+  const videos = getVideos(playlistId);
+  if (videos.length <= 0) {
+    return;
+  }
+  console.log(videos);
+  
+  const stats = getVideoInfo(videos);
+  if (stats.length <= 0) {
+    return;
+  }
+  console.log(stats);
+  
+  const beforelastrow = sheet.getLastRow();
+  if (beforelastrow >= 7) {
+    sheet.deleteRows(7, beforelastrow - 6);
+  }
+  
+  let results = [];
+  for (let i = 0; i < stats.length; i++) {
+    results.push([
+      stats[i].title,
+      stats[i].publishedAt,
+      stats[i].duration,
+      stats[i].viewCount,
+      stats[i].likeCount,
+      stats[i].dislikeCount,
+      stats[i].likeCount / stats[i].viewCount
+    ]);
+  }
+  sheet.getRange(7, 1, results.length, 7).setValues(results);
+  
+  return;
+}
+
+
+function exec() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getActiveSheet();
+  // Driver code
+  const channelURL = sheet.getRange("A2").getDisplayValue();
+  Logger.log(channelURL);
+  const word = "channel";
+  if (isWordPresent(channelURL, word)){
+    const channelId = channelURL.match(/channel\/.*$/g)[0].replace('channel/','');
+    Logger.log(channelId);
+    supportexec(sheet,channelId);
+  }
+  //If the channel URL is custom URL.
+  else{
+    const channelId = channelURL;
+    supportexec(sheet,channelId);
+  }
+}
+    
+
+
+function getUploadPlaylistId(channelId) {
+  return YouTube.Channels.list("contentDetails", {id: channelId}).items[0].contentDetails.relatedPlaylists.uploads;
+}
+
+function getVideos(playlistId, maxNum = 1000) {
+  let results = [];
+  let cnt = 0;
+  let nextPageToken = '';
+  let maxResults = Math.min(50, maxNum);
+  apiloop : while (1) {
+    const apiResult = YouTube.PlaylistItems.list("contentDetails", {playlistId : playlistId, maxResults : maxResults, pageToken : nextPageToken});
+    const totalResults = apiResult.pageInfo.totalResults;
+    nextPageToken = apiResult.nextPageToken;
+    
+    for (let i = 0; i < apiResult.items.length; i++) {
+      results.push(apiResult.items[i].contentDetails.videoId);
+      cnt++;
+      if (cnt >= maxNum || cnt >= totalResults) {
+        break apiloop;
+      }
+    }
+  }
+  return results;
+}
+
+function getVideoInfo(videoIds) {
+  let results = [];
+  for (let idSlice = 0; idSlice < videoIds.length / 50; idSlice++) {
+    const videoIdStr = videoIds.slice(idSlice * 50,idSlice * 50 + 50).join(',');
+    const apiResult = YouTube.Videos.list("contentDetails,statistics,snippet", {id : videoIdStr});
+    for (let i = 0; i < apiResult.items.length; i++) {
+      let item = apiResult.items[i];
+      results.push({
+        title : item.snippet.title,
+        publishedAt : item.snippet.publishedAt,
+        duration : item.contentDetails.duration,
+        viewCount : item.statistics.viewCount,
+        likeCount : item.statistics.likeCount,
+        dislikeCount : item.statistics.dislikeCount
+      });
+    }
+  }
+  return results;
+}
